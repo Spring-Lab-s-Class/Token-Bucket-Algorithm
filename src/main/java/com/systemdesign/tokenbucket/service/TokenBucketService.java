@@ -5,7 +5,9 @@ import com.systemdesign.tokenbucket.exception.RateLimitExceededException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -62,6 +64,23 @@ public class TokenBucketService {
             }
         }
         return TokenBucketResponse.from(redisKey, currentTokens);
+    }
+
+    // 토큰 리필 로직
+    @Scheduled(fixedRate = TOKEN_BUCKET_REFILL_DURATION * 1000)
+    public void refillTokenBuckets() {
+        Set<String> keys = redisTemplate.keys(TOKEN_BUCKET_KEY + "*");
+        if (keys == null) {
+            return;
+        }
+
+        for (String key : keys) {
+            Long currentTokens = redisTemplate.opsForValue().get(key);
+            if (currentTokens != null && currentTokens < TOKEN_BUCKET_MAX_TOKEN) {
+                long tokensToAdd = TOKEN_BUCKET_MAX_TOKEN - currentTokens;
+                redisTemplate.opsForValue().increment(key, tokensToAdd);
+            }
+        }
     }
 
     private String generateRedisKey() {
